@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Admin Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+  </style>
+</head>
+<body>
+  <h1>Admin Dashboard</h1>
+
+  <h2>Registered Users</h2>
+  <table id="usersTable">
+    <thead>
+      <tr><th>Phone</th><th>Password</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <h2>Uploads</h2>
+  <p>
+    View uploaded deposit proofs and withdrawal receipts on the server folder:<br />
+    <strong>uploads/deposits/</strong><br />
+    <strong>uploads/withdrawals/</strong>
+  </p>
+
+  <script>
+    async function loadUsers() {
+      const res = await fetch('/admin/users');
+      const users = await res.json();
+
+      const tbody = document.querySelector('#usersTable tbody');
+      tbody.innerHTML = '';
+
+      users.forEach(user => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${user.phone}</td><td>${user.password}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    loadUsers();
+  </script>
+</body>
+</html>
