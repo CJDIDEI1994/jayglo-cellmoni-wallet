@@ -1,96 +1,97 @@
 const express = require('express');
-const bodyParser = require('body-parser');
-const multer = require('multer');
 const path = require('path');
-const { MongoClient } = require('mongodb');
+const multer = require('multer');
 
 const app = express();
-const port = 3000;
+const PORT = process.env.PORT || 3000;
 
-// Connect public folder correctly
+// Middleware to serve static files from 'public' folder
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(express.json());
+// Middleware to parse URL-encoded bodies (for form POST)
+app.use(express.urlencoded({ extended: true }));
 
-// MongoDB connection string
-const uri = 'mongodb://localhost:27017';
-let db;
+// Temporary in-memory "database"
+const users = [];
 
-MongoClient.connect(uri, { useUnifiedTopology: true })
-  .then(client => {
-    console.log('Connected to Database');
-    db = client.db('JaygloWalletDB');
-  })
-  .catch(err => console.error(err));
-
-// Multer setup for uploads
-const depositStorage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'uploads/deposits'),
-  filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname))
+// Route to serve homepage at root URL
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
-const uploadDeposit = multer({ storage: depositStorage });
 
-const withdrawStorage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'uploads/withdrawals'),
-  filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname))
+// Route to handle user registration
+app.post('/register', (req, res) => {
+  const { name, phone, password } = req.body;
+
+  // Simple validation
+  if (!name || !phone || !password) {
+    return res.send('Please fill all fields.');
+  }
+
+  // Check if phone already registered
+  if (users.find(u => u.phone === phone)) {
+    return res.send('Phone number already registered.');
+  }
+
+  // Save user (in-memory)
+  users.push({ name, phone, password });
+  res.send('Registration successful! You can now <a href="/index.html">login</a>.');
 });
-const uploadWithdraw = multer({ storage: withdrawStorage });
 
-// Registration route
-app.post('/register', async (req, res) => {
+// Route to handle user login
+app.post('/login', (req, res) => {
   const { phone, password } = req.body;
-  if (!phone || !password) return res.status(400).send('Phone and password required');
 
-  try {
-    const user = await db.collection('users').findOne({ phone });
-    if (user) return res.status(400).send('User already exists');
+  const user = users.find(u => u.phone === phone && u.password === password);
 
-    await db.collection('users').insertOne({ phone, password });
-    res.send('User registered successfully');
-  } catch (error) {
-    res.status(500).send('Error registering user');
+  if (!user) {
+    return res.send('Invalid phone number or password.');
+  }
+
+  res.redirect('/dashboard.html');
+});
+
+// Configure storage for uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/'); // Save files in uploads folder
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname)); // Unique file name with original extension
   }
 });
 
-// Login route
-app.post('/login', async (req, res) => {
-  const { phone, password } = req.body;
-  if (!phone || !password) return res.status(400).send('Phone and password required');
+const upload = multer({ storage: storage });
 
-  try {
-    const user = await db.collection('users').findOne({ phone, password });
-    if (!user) return res.status(400).send('Invalid phone or password');
+// Handle deposit form POST
+app.post('/deposit', upload.single('depositProof'), (req, res) => {
+  const { cellmoniNumber } = req.body;
+  const depositProof = req.file;
 
-    res.send('Login successful');
-  } catch (error) {
-    res.status(500).send('Error logging in');
+  if (!cellmoniNumber || !depositProof) {
+    return res.send('Please provide your CellMoni number and upload proof.');
   }
+
+  // TODO: Save deposit info somewhere (database or in-memory)
+
+  res.send(`Deposit proof received for CellMoni Number ${cellmoniNumber}. We will verify manually. <a href="/dashboard.html">Back to dashboard</a>`);
 });
 
-// Upload deposit proof
-app.post('/upload-proof', uploadDeposit.single('proof'), (req, res) => {
-  if (!req.file) return res.status(400).send('No file uploaded');
-  res.send('Deposit proof uploaded successfully');
-});
+// Handle withdrawal form POST
+app.post('/withdraw', upload.single('withdrawProof'), (req, res) => {
+  const { amount, bankAccount } = req.body;
+  const withdrawProof = req.file;
 
-// Upload withdrawal receipt
-app.post('/withdraw-request', uploadWithdraw.single('receipt'), (req, res) => {
-  if (!req.file) return res.status(400).send('No file uploaded');
-  res.send('Withdrawal receipt uploaded successfully');
-});
-
-// Admin: get all users
-app.get('/admin/users', async (req, res) => {
-  try {
-    const users = await db.collection('users').find().toArray();
-    res.json(users);
-  } catch (error) {
-    res.status(500).send('Error fetching users');
+  if (!amount || !bankAccount || !withdrawProof) {
+    return res.send('Please fill all withdrawal details and upload proof.');
   }
+
+  // TODO: Save withdrawal request info somewhere (database or in-memory)
+
+  res.send(`Withdrawal request for K${amount} received. Agent ID: 19070. We will process manually. <a href="/dashboard.html">Back to dashboard</a>`);
 });
 
-// Start server
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
 });
